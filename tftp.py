@@ -101,6 +101,7 @@ def tftp_transfer(fd, hostname, direction):
 
     ref = ""
     blockref = -1
+    packloss = 0
     # Put or get the file, block by block, in a loop.
     while True:
         # Wait for packet, write the data to the filedescriptor or
@@ -112,28 +113,37 @@ def tftp_transfer(fd, hostname, direction):
         if s in rl:
             (packet, dest) = s.recvfrom(BLOCK_SIZE + 4)
             opcode = get_opcode(packet)
-            if opcode == 3: 
-                print "opcode = DATA"
-            elif opcode == 4: 
-                print "opcode = ACK"
-            elif opcode == 5:
-                print "opcode = ERROR"
+            
+            # if opcode == 3: 
+            #     print "opcode = DATA"
+            # elif opcode == 4: 
+            #     print "opcode = ACK"
+            # elif opcode == 5:
+            #     print "opcode = ERROR"
 
             if opcode == OPCODE_DATA:
                 (opcode, p1, p2) = parse_packet(packet)
                 # p1 = Blocknr
                 # p2 = Data
-                blockref = p1
-                ref += p2
-                ack = make_packet_ack(p1)
-                print str(len(p2))
-                if len(p2) == BLOCK_SIZE:
-                    s.sendto(ack, dest)
+                if p1 != blockref:
+                    blockref = p1
+                    ref += p2
+                    ack = make_packet_ack(p1)
+                    #print str(len(p2))
+                    if len(p2) == BLOCK_SIZE:
+                        s.sendto(ack, dest)
+                    else:
+                        fd.write(ref)
+                        s.sendto(ack, dest)
+                        print "Wrote to FD and sent ACK"
+                        print "Packets resent: " + str(packloss)
+                        return
                 else:
-                    fd.write(ref)
+                    # Received same packet again
+                    #print "Packet loss, resend."
+                    packloss += 1
+                    ack = make_packet_ack(blockref)
                     s.sendto(ack, dest)
-                    print "Wrote to FD and sent ACK"
-                    return
 
             elif opcode == OPCODE_ACK:
                 # TODO
@@ -142,20 +152,29 @@ def tftp_transfer(fd, hostname, direction):
                 # p1 = Blocknr
                 # blockref initially -1
                 # Packet loss: Server didn't get last transmission. Resend
-
-                ref = fd.read(BLOCK_SIZE)
-                print str(len(ref))
-                datapkt = make_packet_data(p1+1, ref)
-                s.sendto(datapkt, dest)
-                if len(ref) < BLOCK_SIZE:
-                    print "End of file reached"
-                    return
+                if p1 != blockref:
+                    ref = fd.read(BLOCK_SIZE)
+                    #print str(len(ref))
+                    blockref = p1
+                    datapkt = make_packet_data(p1+1, ref)
+                    s.sendto(datapkt, dest)
+                    if len(ref) < BLOCK_SIZE:
+                        print "End of file reached"
+                        print "Packets resent: " + str(packloss)
+                        return
+                else:
+                    # Packet loss, resend.
+                    datapkt = make_packet_data(blockref+1, ref)
+                    #print "Packet loss, resend"
+                    packloss += 1
+                    s.sendto(datapkt, dest)
 
             elif opcode == OPCODE_ERR:
                 # TODO
                 print "Error"
         else:
-            print "Not in rl"
+            #print "Not in rl"
+            return
         
 
 
