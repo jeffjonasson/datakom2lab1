@@ -173,8 +173,8 @@ def tftp_transfer(fd, hostname, direction):
                 # TODO
                 print "Error"
         else:
-            #print "Not in rl"
-            return
+            print "Not in rl"
+            
         
 
 
