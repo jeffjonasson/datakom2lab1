@@ -14,7 +14,7 @@ MODE_NETASCII= "netascii"
 MODE_OCTET=    "octet"
 MODE_MAIL=     "mail"
 
-TFTP_PORT= 10069
+TFTP_PORT= 6969
 
 # Timeout in seconds
 TFTP_TIMEOUT= 2
@@ -31,6 +31,10 @@ ERROR_CODES = ["Undef",
 # Internal defines
 TFTP_GET = 1
 TFTP_PUT = 2
+
+small_checksum = '667ff61c0d573502e482efa85b468f1f'
+medium_checksum = 'ee98d0524433e2ca4c0c1e05685171a7'
+large_checksum = 'f5b558fe29913cc599161bafe0c08ccf'
 
 
 def make_packet_rrq(filename, mode):
@@ -94,10 +98,12 @@ def tftp_transfer(fd, hostname, direction):
         packet = make_packet_rrq(fd.name, MODE_OCTET)
         print "RRQ: " + packet
         s.sendto(packet, (address, TFTP_PORT))
+        print "Please wait..."
     else:
         packet = make_packet_wrq(fd.name, MODE_OCTET)
         print "WRQ: " + packet
         s.sendto(packet, (address, TFTP_PORT))
+        print "Please wait..."
 
     ref = ""
     blockref = -1
@@ -173,7 +179,7 @@ def tftp_transfer(fd, hostname, direction):
                 # TODO
                 print "Error"
         else:
-            print "Not in rl"
+            pass
             
         
 
