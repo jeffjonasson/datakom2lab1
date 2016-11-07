@@ -17,7 +17,7 @@ MODE_MAIL=     "mail"
 TFTP_PORT= 10069
 
 # Timeout in seconds
-TFTP_TIMEOUT= 2
+TFTP_TIMEOUT= 0.5
 
 ERROR_CODES = ["Undef",
                "File not found",
@@ -50,9 +50,6 @@ def make_packet_err(errcode, errmsg):
     return struct.pack("!H", OPCODE_ERR) + errcode + errmsg + '\0'
 
 def parse_packet(msg):
-    #"""This function parses a recieved packet and returns a tuple where the
-    #    first value is the opcode as an integer and the following values are
-    #    the other parameters of the packets in python data types"""
     opcode = struct.unpack("!H", msg[:2])[0]
     if opcode == OPCODE_RRQ:
         l = msg[2:].split('\0')
@@ -80,16 +77,11 @@ def get_opcode(msg):
     return opcode
 
 def tftp_transfer(fd, hostname, direction):
-    # Implement this function
-    
-    # Open socket interface
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    #s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+
     addrinfo = socket.getaddrinfo(hostname, TFTP_PORT)
     (family, socktype, proto, canonname, (address,port)) = addrinfo[1]
     
-    # Check if we are putting a file or getting a file and send
-    #  the corresponding request.
     if direction == TFTP_GET:
         packet = make_packet_rrq(fd.name, MODE_OCTET)
         s.sendto(packet, (address, TFTP_PORT))
@@ -99,11 +91,7 @@ def tftp_transfer(fd, hostname, direction):
 
     ref = ""
     blockref = -1
-    # Put or get the file, block by block, in a loop.
     while True:
-        # Wait for packet, write the data to the filedescriptor or
-        # read the next block from the file. Send new packet to server.
-        # Don't forget to deal with timeouts and received error packets.
 
         (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
 
@@ -113,50 +101,40 @@ def tftp_transfer(fd, hostname, direction):
 
             if opcode == OPCODE_DATA:
                 (opcode, p1, p2) = parse_packet(packet)
-                # p1 = Blocknr
-                # p2 = Data
                 if p1 != blockref:
                     blockref = p1
                     ref += p2
-                    ack = make_packet_ack(p1)
+                    packet = make_packet_ack(p1)
                     
                     if len(p2) == BLOCK_SIZE:
-                        s.sendto(ack, dest)
+                        s.sendto(packet, dest)
                     else:
                         fd.write(ref)
-                        s.sendto(ack, dest)
+                        s.sendto(packet, dest)
                         return
                 else:
-                    # Received same packet again
-                    ack = make_packet_ack(blockref)
-                    s.sendto(ack, dest)
+                    packet = make_packet_ack(blockref)
+                    s.sendto(packet, dest)
 
             elif opcode == OPCODE_ACK:
-                # TODO
-                # If we get p1 = 0, they want next packet to have blocknr 1
                 (opcode, p1) = parse_packet(packet)
-                # p1 = Blocknr
-                # blockref initially -1
-                # Packet loss: Server didn't get last transmission. Resend
                 if p1 != blockref:
                     ref = fd.read(BLOCK_SIZE)
-                    #print str(len(ref))
                     blockref = p1
-                    datapkt = make_packet_data(p1+1, ref)
-                    s.sendto(datapkt, dest)
+                    packet = make_packet_data(p1+1, ref)
+                    s.sendto(packet, dest)
                     if len(ref) < BLOCK_SIZE:
                         return
                 else:
-                    # Packet loss, resend.
-                    datapkt = make_packet_data(blockref+1, ref)
-                    #print "Packet loss, resend"
-                    s.sendto(datapkt, dest)
+                    s.sendto(packet, dest)
 
             elif opcode == OPCODE_ERR:
                 # TODO
                 (opcode, errcode, errmsg) = parse_packet(packet)
+                print "Error! : " + errmsg
         else:
-            pass
+            s.sendto(packet, dest)
+            
             
         
 
