@@ -77,10 +77,12 @@ def get_opcode(msg):
     return opcode
 
 def tftp_transfer(fd, hostname, direction):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    addrinfo = socket.getaddrinfo(hostname, TFTP_PORT)
-    (family, socktype, proto, canonname, (address,port)) = addrinfo[1]
+
+    addrinfo = socket.getaddrinfo(hostname, 69, socket.AF_INET, socket.SOCK_DGRAM)
+    (family, socktype, proto, canonname, (address,port)) = addrinfo[0]
+
+    s = socket.socket(family, socktype)    
     
     if direction == TFTP_GET:
         packet = make_packet_rrq(fd.name, MODE_OCTET)
