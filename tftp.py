@@ -14,7 +14,7 @@ MODE_NETASCII= "netascii"
 MODE_OCTET=    "octet"
 MODE_MAIL=     "mail"
 
-TFTP_PORT= 6969
+TFTP_PORT= 10069
 
 # Timeout in seconds
 TFTP_TIMEOUT= 2
@@ -31,10 +31,6 @@ ERROR_CODES = ["Undef",
 # Internal defines
 TFTP_GET = 1
 TFTP_PUT = 2
-
-small_checksum = '667ff61c0d573502e482efa85b468f1f'
-medium_checksum = 'ee98d0524433e2ca4c0c1e05685171a7'
-large_checksum = 'f5b558fe29913cc599161bafe0c08ccf'
 
 
 def make_packet_rrq(filename, mode):
@@ -96,36 +92,24 @@ def tftp_transfer(fd, hostname, direction):
     #  the corresponding request.
     if direction == TFTP_GET:
         packet = make_packet_rrq(fd.name, MODE_OCTET)
-        print "RRQ: " + packet
         s.sendto(packet, (address, TFTP_PORT))
-        print "Please wait..."
     else:
         packet = make_packet_wrq(fd.name, MODE_OCTET)
-        print "WRQ: " + packet
         s.sendto(packet, (address, TFTP_PORT))
-        print "Please wait..."
 
     ref = ""
     blockref = -1
-    packloss = 0
     # Put or get the file, block by block, in a loop.
     while True:
         # Wait for packet, write the data to the filedescriptor or
         # read the next block from the file. Send new packet to server.
         # Don't forget to deal with timeouts and received error packets.
 
-        (rl,wl,xl) = select.select([s], [], [], 10)
+        (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
 
         if s in rl:
             (packet, dest) = s.recvfrom(BLOCK_SIZE + 4)
             opcode = get_opcode(packet)
-            
-            # if opcode == 3: 
-            #     print "opcode = DATA"
-            # elif opcode == 4: 
-            #     print "opcode = ACK"
-            # elif opcode == 5:
-            #     print "opcode = ERROR"
 
             if opcode == OPCODE_DATA:
                 (opcode, p1, p2) = parse_packet(packet)
@@ -135,19 +119,15 @@ def tftp_transfer(fd, hostname, direction):
                     blockref = p1
                     ref += p2
                     ack = make_packet_ack(p1)
-                    #print str(len(p2))
+                    
                     if len(p2) == BLOCK_SIZE:
                         s.sendto(ack, dest)
                     else:
                         fd.write(ref)
                         s.sendto(ack, dest)
-                        print "Wrote to FD and sent ACK"
-                        print "Packets resent: " + str(packloss)
                         return
                 else:
                     # Received same packet again
-                    #print "Packet loss, resend."
-                    packloss += 1
                     ack = make_packet_ack(blockref)
                     s.sendto(ack, dest)
 
@@ -165,19 +145,16 @@ def tftp_transfer(fd, hostname, direction):
                     datapkt = make_packet_data(p1+1, ref)
                     s.sendto(datapkt, dest)
                     if len(ref) < BLOCK_SIZE:
-                        print "End of file reached"
-                        print "Packets resent: " + str(packloss)
                         return
                 else:
                     # Packet loss, resend.
                     datapkt = make_packet_data(blockref+1, ref)
                     #print "Packet loss, resend"
-                    packloss += 1
                     s.sendto(datapkt, dest)
 
             elif opcode == OPCODE_ERR:
                 # TODO
-                print "Error"
+                (opcode, errcode, errmsg) = parse_packet(packet)
         else:
             pass
             
