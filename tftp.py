@@ -34,7 +34,6 @@ TFTP_PUT = 2
 
 
 def make_packet_rrq(filename, mode):
-    # Note the exclamation mark in the format string to pack(). What is it for?
     return struct.pack("!H", OPCODE_RRQ) + filename + '\0' + mode + '\0'
 
 def make_packet_wrq(filename, mode):
@@ -66,10 +65,8 @@ def parse_packet(msg):
     elif opcode == OPCODE_ACK:
         return opcode, struct.unpack("!H", msg[2:4])[0]
     elif opcode == OPCODE_ERR:
-        #TODO
         return opcode, msg[2:4], msg[4:].split('\0')[0]
-    # TODO: Something is wrong
-    else: 
+    else:
         return None
 
 def get_opcode(msg):
@@ -78,11 +75,11 @@ def get_opcode(msg):
 
 def tftp_transfer(fd, hostname, direction):
 
-
     addrinfo = socket.getaddrinfo(hostname, 69, socket.AF_INET, socket.SOCK_DGRAM)
-    (family, socktype, proto, canonname, (address,port)) = addrinfo[0]
+    (family, socktype, proto, canonname, (address,_)) = addrinfo[0]
 
-    s = socket.socket(family, socktype)    
+    s = socket.socket(family, socktype)
+    dest = (address, TFTP_PORT)   
     
     if direction == TFTP_GET:
         packet = make_packet_rrq(fd.name, MODE_OCTET)
@@ -93,21 +90,20 @@ def tftp_transfer(fd, hostname, direction):
 
     ref = ""
     blockref = -1
+    timeout_counter = 0
+
     while True:
-
         (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
-
         if s in rl:
             (packet, dest) = s.recvfrom(BLOCK_SIZE + 4)
             opcode = get_opcode(packet)
-
+            timeout_counter = 0
             if opcode == OPCODE_DATA:
                 (opcode, p1, p2) = parse_packet(packet)
                 if p1 != blockref:
                     blockref = p1
                     ref += p2
                     packet = make_packet_ack(p1)
-                    
                     if len(p2) == BLOCK_SIZE:
                         s.sendto(packet, dest)
                     else:
@@ -117,7 +113,6 @@ def tftp_transfer(fd, hostname, direction):
                 else:
                     packet = make_packet_ack(blockref)
                     s.sendto(packet, dest)
-
             elif opcode == OPCODE_ACK:
                 (opcode, p1) = parse_packet(packet)
                 if p1 != blockref:
@@ -129,18 +124,17 @@ def tftp_transfer(fd, hostname, direction):
                         return
                 else:
                     s.sendto(packet, dest)
-
             elif opcode == OPCODE_ERR:
-                # TODO
                 (opcode, errcode, errmsg) = parse_packet(packet)
                 print "Error! : " + errmsg
         else:
-            s.sendto(packet, dest)
+            if timeout_counter > 10:
+                print "Timeout"
+                break
+            else:
+                s.sendto(packet, dest)
+                timeout_counter += 1
             
-            
-        
-
-
 def usage():
     """Print the usage on stderr and quit with error code"""
     sys.stderr.write("Usage: %s [-g|-p] FILE HOST\n" % sys.argv[0])
@@ -148,7 +142,6 @@ def usage():
 
 
 def main():
-    # No need to change this function
     direction = TFTP_GET
     if len(sys.argv) == 3:
         filename = sys.argv[1]
