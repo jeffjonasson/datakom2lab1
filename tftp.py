@@ -14,7 +14,7 @@ MODE_NETASCII= "netascii"
 MODE_OCTET=    "octet"
 MODE_MAIL=     "mail"
 
-TFTP_PORT= 10069
+TFTP_PORT= 6969
 
 # Timeout in seconds
 TFTP_TIMEOUT= 0.5
@@ -96,29 +96,29 @@ def tftp_transfer(fd, hostname, direction):
         (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
         if s in rl:
             (packet, dest) = s.recvfrom(BLOCK_SIZE + 4)
+            
             opcode = get_opcode(packet)
             timeout_counter = 0
-            if opcode == OPCODE_DATA:
-                (opcode, p1, p2) = parse_packet(packet)
-                if p1 != blockref:
-                    blockref = p1
-                    ref += p2
-                    packet = make_packet_ack(p1)
-                    if len(p2) == BLOCK_SIZE:
+            if opcode == OPCODE_DATA and direction == TFTP_GET:
+                (opcode, packet_number, packet_data) = parse_packet(packet)
+                if packet_number != blockref:
+                    blockref = packet_number
+                    fd.write(packet_data)
+                    packet = make_packet_ack(packet_number)
+                    if len(packet_data) == BLOCK_SIZE:
                         s.sendto(packet, dest)
                     else:
-                        fd.write(ref)
                         s.sendto(packet, dest)
                         return
                 else:
                     packet = make_packet_ack(blockref)
                     s.sendto(packet, dest)
-            elif opcode == OPCODE_ACK:
-                (opcode, p1) = parse_packet(packet)
-                if p1 != blockref:
+            elif opcode == OPCODE_ACK and direction == TFTP_PUT:
+                (opcode, packet_number) = parse_packet(packet)
+                if packet_number == blockref+1:
                     ref = fd.read(BLOCK_SIZE)
-                    blockref = p1
-                    packet = make_packet_data(p1+1, ref)
+                    blockref = packet_number
+                    packet = make_packet_data(packet_number+1, ref)
                     s.sendto(packet, dest)
                     if len(ref) < BLOCK_SIZE:
                         return
