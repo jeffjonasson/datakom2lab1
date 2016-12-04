@@ -91,6 +91,7 @@ def tftp_transfer(fd, hostname, direction):
     ref = ""
     blockref = -1
     timeout_counter = 0
+    lastPacket = False
 
     while True:
         (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
@@ -121,6 +122,7 @@ def tftp_transfer(fd, hostname, direction):
                     packet = make_packet_data(packet_number+1, ref)
                     s.sendto(packet, dest)
                     if len(ref) < BLOCK_SIZE:
+                        lastPacket = True
                         return
                 else:
                     s.sendto(packet, dest)
