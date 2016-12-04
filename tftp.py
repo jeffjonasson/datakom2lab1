@@ -97,39 +97,42 @@ def tftp_transfer(fd, hostname, direction):
         (rl,wl,xl) = select.select([s], [], [], TFTP_TIMEOUT)
         if s in rl:
             (packet, dest) = s.recvfrom(BLOCK_SIZE + 4)
-            
-            opcode = get_opcode(packet)
-            timeout_counter = 0
-            if opcode == OPCODE_DATA and direction == TFTP_GET:
-                (opcode, packet_number, packet_data) = parse_packet(packet)
-                if packet_number != blockref:
-                    blockref = packet_number
-                    fd.write(packet_data)
-                    packet = make_packet_ack(packet_number)
-                    if len(packet_data) == BLOCK_SIZE:
+            if address != dest[0]:
+                print "Error: Packet recieved from wrong host."
+                return
+            else :
+                opcode = get_opcode(packet)
+                timeout_counter = 0
+                if opcode == OPCODE_DATA and direction == TFTP_GET:
+                    (opcode, packet_number, packet_data) = parse_packet(packet)
+                    if packet_number != blockref:
+                        blockref = packet_number
+                        fd.write(packet_data)
+                        packet = make_packet_ack(packet_number)
+                        if len(packet_data) == BLOCK_SIZE:
+                            s.sendto(packet, dest)
+                        else:
+                            s.sendto(packet, dest)
+                            return
+                    else:
+                        packet = make_packet_ack(blockref)
                         s.sendto(packet, dest)
+                elif opcode == OPCODE_ACK and direction == TFTP_PUT:
+                    (opcode, packet_number) = parse_packet(packet)
+                    if lastPacket == True and packet_number == blockref+1:
+                        return
+                    elif packet_number == blockref+1:
+                        ref = fd.read(BLOCK_SIZE)
+                        blockref = packet_number
+                        packet = make_packet_data(packet_number+1, ref)
+                        s.sendto(packet, dest)
+                        if len(ref) < BLOCK_SIZE:
+                            lastPacket = True
                     else:
                         s.sendto(packet, dest)
-                        return
-                else:
-                    packet = make_packet_ack(blockref)
-                    s.sendto(packet, dest)
-            elif opcode == OPCODE_ACK and direction == TFTP_PUT:
-                (opcode, packet_number) = parse_packet(packet)
-                if lastPacket == True and packet_number == blockref+1:
-                    return
-                elif packet_number == blockref+1:
-                    ref = fd.read(BLOCK_SIZE)
-                    blockref = packet_number
-                    packet = make_packet_data(packet_number+1, ref)
-                    s.sendto(packet, dest)
-                    if len(ref) < BLOCK_SIZE:
-                        lastPacket = True
-                else:
-                    s.sendto(packet, dest)
-            elif opcode == OPCODE_ERR:
-                (opcode, errcode, errmsg) = parse_packet(packet)
-                print "Error! : " + errmsg
+                elif opcode == OPCODE_ERR:
+                    (opcode, errcode, errmsg) = parse_packet(packet)
+                    print "Error! : " + errmsg
         else:
             if timeout_counter > 10:
                 print "Timeout"
